@@ -45,7 +45,7 @@ func main() {
     // ── urls ──
 	urlRepo     := repository.NewURLRepository(db)
 	urlService  := service.NewURLService(urlRepo)
-	urlHandler  := handler.NewURLHandler(urlService, cfg.BaseURL)
+    urlHandler := handler.NewURLHandler(urlService, cfg.BaseURL, cfg.JWTSecret)
 
 	// set up router
 	r := gin.Default()
@@ -64,7 +64,7 @@ func main() {
     // anonymous url routes
 	urls := r.Group("/urls")
 	{
-		urls.POST("", urlHandler.CreateAnonymous)
+		urls.POST("", urlHandler.Create)
 		urls.GET("/:alias", urlHandler.GetByAlias)
 	}
 

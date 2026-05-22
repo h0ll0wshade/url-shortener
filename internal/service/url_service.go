@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/h0ll0wshade/url-shortener/internal/model"
 	"github.com/h0ll0wshade/url-shortener/internal/repository"
@@ -17,30 +20,29 @@ type URLService struct {
 }
 
 func NewURLService(urlRepo *repository.URLRepository) *URLService {
-	return &URLService{
-		urlRepo: urlRepo,
-	}
+	return &URLService{urlRepo: urlRepo}
 }
 
-// CreateAnonymous — shorten a URL for an anonymous user
-func (s *URLService) CreateAnonymous(ctx context.Context, originalURL string) (*model.URL, error) {
-	// generate a unique alias
+// CreateWithRandomAlias — generates a random alias, retries if taken
+func (s *URLService) CreateWithRandomAlias(ctx context.Context, originalURL string, userID string) (*model.URL, error) {
 	alias, err := s.generateUniqueAlias(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return s.save(ctx, alias, originalURL, userID)
+}
 
-	url := &model.URL{
-		Alias:       alias,
-		OriginalURL: originalURL,
-		CreatedAt:   time.Now(),
-	}
-
-	if err := s.urlRepo.Create(ctx, url); err != nil {
+// CreateWithCustomAlias — uses the provided alias, fails if already taken
+func (s *URLService) CreateWithCustomAlias(ctx context.Context, originalURL, customAlias, userID string) (*model.URL, error) {
+	// check if alias is already taken
+	existing, err := s.urlRepo.FindByAlias(ctx, customAlias)
+	if err != nil {
 		return nil, err
 	}
-
-	return url, nil
+	if existing != nil {
+		return nil, errors.New("alias already taken")
+	}
+	return s.save(ctx, customAlias, originalURL, userID)
 }
 
 // GetByAlias — fetch URL metadata by alias
@@ -48,22 +50,39 @@ func (s *URLService) GetByAlias(ctx context.Context, alias string) (*model.URL, 
 	return s.urlRepo.FindByAlias(ctx, alias)
 }
 
-// generateUniqueAlias — keep generating until we find one not in DB
+// save — internal helper, builds the URL and inserts it
+func (s *URLService) save(ctx context.Context, alias, originalURL, userID string) (*model.URL, error) {
+	url := &model.URL{
+		Alias:       alias,
+		OriginalURL: originalURL,
+		CreatedAt:   time.Now(),
+	}
+
+	// attach userID if logged in
+	if userID != "" {
+		objID, err := primitive.ObjectIDFromHex(userID)
+		if err == nil {
+			url.UserID = objID
+		}
+	}
+
+	if err := s.urlRepo.Create(ctx, url); err != nil {
+		return nil, err
+	}
+	return url, nil
+}
+
+// generateUniqueAlias — keep trying until we find one not in DB
 func (s *URLService) generateUniqueAlias(ctx context.Context) (string, error) {
 	for {
 		alias := randomString(aliasLength)
-
-		// check if alias already exists in DB
 		existing, err := s.urlRepo.FindByAlias(ctx, alias)
 		if err != nil {
 			return "", err
 		}
-
-		// alias is free — use it
 		if existing == nil {
 			return alias, nil
 		}
-		// alias taken — loop and try again
 	}
 }
 
