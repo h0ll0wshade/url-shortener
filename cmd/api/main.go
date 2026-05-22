@@ -14,7 +14,7 @@ import (
 	"github.com/h0ll0wshade/url-shortener/internal/repository"
 	"github.com/h0ll0wshade/url-shortener/internal/service"
 
-
+    "github.com/h0ll0wshade/url-shortener/internal/middleware"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
     // ── urls ──
 	urlRepo     := repository.NewURLRepository(db)
 	urlService  := service.NewURLService(urlRepo)
-    urlHandler := handler.NewURLHandler(urlService, cfg.BaseURL, cfg.JWTSecret)
+    urlHandler := handler.NewURLHandler(urlService, cfg.BaseURL)
 
 	// set up router
 	r := gin.Default()
@@ -63,10 +63,11 @@ func main() {
 
     // anonymous url routes
 	urls := r.Group("/urls")
-	{
-		urls.POST("", urlHandler.Create)
-		urls.GET("/:alias", urlHandler.GetByAlias)
-	}
+    urls.Use(middleware.OptionalAuth(cfg.JWTSecret))
+    {
+        urls.POST("", urlHandler.Create)
+        urls.GET("/:alias", urlHandler.GetByAlias)
+    }
 
     log.Println("🚀 Server running on port", cfg.Port)
     r.Run(":" + cfg.Port)

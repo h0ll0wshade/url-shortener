@@ -2,11 +2,9 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/h0ll0wshade/url-shortener/internal/model"
 	"github.com/h0ll0wshade/url-shortener/internal/service"
@@ -15,14 +13,12 @@ import (
 type URLHandler struct {
 	urlService *service.URLService
 	baseURL    string
-	jwtSecret  string
 }
 
-func NewURLHandler(urlService *service.URLService, baseURL, jwtSecret string) *URLHandler {
+func NewURLHandler(urlService *service.URLService, baseURL string) *URLHandler {
 	return &URLHandler{
 		urlService: urlService,
 		baseURL:    baseURL,
-		jwtSecret:  jwtSecret,
 	}
 }
 
@@ -38,8 +34,8 @@ func (h *URLHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// extract userID from JWT if provided (optional)
-	userID := h.extractUserID(c)
+	// user_id is set by the OptionalAuth middleware (may be "")
+	userID := c.GetString("user_id")
 
 	// custom alias requires login
 	if req.CustomAlias != "" && userID == "" {
@@ -47,7 +43,6 @@ func (h *URLHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// decide which service function to call
 	var url *model.URL
 	var err error
 
@@ -100,32 +95,4 @@ func (h *URLHandler) GetByAlias(c *gin.Context) {
 		"created_at":   url.CreatedAt,
 		"expires_at":   url.ExpiresAt,
 	})
-}
-
-// extractUserID — reads the JWT if present, returns user_id or empty string
-func (h *URLHandler) extractUserID(c *gin.Context) string {
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		return ""
-	}
-
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return ""
-	}
-
-	token, err := jwt.Parse(parts[1], func(t *jwt.Token) (interface{}, error) {
-		return []byte(h.jwtSecret), nil
-	})
-	if err != nil || !token.Valid {
-		return ""
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return ""
-	}
-
-	uid, _ := claims["user_id"].(string)
-	return uid
 }
