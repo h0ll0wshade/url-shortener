@@ -14,6 +14,7 @@ import (
 	"github.com/h0ll0wshade/url-shortener/internal/repository"
 	"github.com/h0ll0wshade/url-shortener/internal/service"
 
+
 )
 
 func main() {
@@ -36,9 +37,15 @@ func main() {
     log.Println("✅ Connected to MongoDB")
 
     db := client.Database(cfg.MongoDB)
+    // ── users ──
 	userRepo := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret)
 	authHandler := handler.NewAuthHandler(authService)
+    
+    // ── urls ──
+	urlRepo     := repository.NewURLRepository(db)
+	urlService  := service.NewURLService(urlRepo)
+	urlHandler  := handler.NewURLHandler(urlService, cfg.BaseURL)
 
 	// set up router
 	r := gin.Default()
@@ -54,6 +61,12 @@ func main() {
 		auth.POST("/login", authHandler.Login)
 	}
 
+    // anonymous url routes
+	urls := r.Group("/urls")
+	{
+		urls.POST("", urlHandler.CreateAnonymous)
+		urls.GET("/:alias", urlHandler.GetByAlias)
+	}
 
     log.Println("🚀 Server running on port", cfg.Port)
     r.Run(":" + cfg.Port)
