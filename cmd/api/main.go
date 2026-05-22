@@ -10,6 +10,10 @@ import (
     "go.mongodb.org/mongo-driver/mongo/options"
 
     "github.com/h0ll0wshade/url-shortener/config"
+	"github.com/h0ll0wshade/url-shortener/internal/handler"
+	"github.com/h0ll0wshade/url-shortener/internal/repository"
+	"github.com/h0ll0wshade/url-shortener/internal/service"
+
 )
 
 func main() {
@@ -32,14 +36,24 @@ func main() {
     log.Println("✅ Connected to MongoDB")
 
     db := client.Database(cfg.MongoDB)
-    _ = db // will use this in next steps
+	userRepo := repository.NewUserRepository(db)
+	authService := service.NewAuthService(userRepo, cfg.JWTSecret)
+	authHandler := handler.NewAuthHandler(authService)
 
-    // Start Gin
-    r := gin.Default()
+	// set up router
+	r := gin.Default()
 
-    r.GET("/health", func(c *gin.Context) {
-        c.JSON(200, gin.H{"status": "ok"})
-    })
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	// auth routes
+	auth := r.Group("/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+	}
+
 
     log.Println("🚀 Server running on port", cfg.Port)
     r.Run(":" + cfg.Port)
