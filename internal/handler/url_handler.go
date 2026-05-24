@@ -96,3 +96,27 @@ func (h *URLHandler) GetByAlias(c *gin.Context) {
 		"expires_at":   url.ExpiresAt,
 	})
 }
+
+// GET /r/:alias
+func (h *URLHandler) Redirect(c *gin.Context) {
+	alias := c.Param("alias")
+
+	url, err := h.urlService.GetByAlias(c.Request.Context(), alias)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "something went wrong"})
+		return
+	}
+	if url == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "alias not found"})
+		return
+	}
+
+	// check if link has expired
+	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
+		c.JSON(http.StatusGone, gin.H{"error": "this link has expired"})
+		return
+	}
+
+	// perform the redirect
+	c.Redirect(http.StatusMovedPermanently, url.OriginalURL)
+}

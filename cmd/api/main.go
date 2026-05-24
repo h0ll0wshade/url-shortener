@@ -68,7 +68,10 @@ func main() {
         urls.POST("", urlHandler.Create)
         urls.GET("/:alias", urlHandler.GetByAlias)
     }
+    // redirect route (no auth needed, never)
+    r.GET("/r/:alias", urlHandler.Redirect)
 
+    
     log.Println("🚀 Server running on port", cfg.Port)
     r.Run(":" + cfg.Port)
 }
