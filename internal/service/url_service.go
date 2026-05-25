@@ -93,3 +93,12 @@ func randomString(n int) string {
 	}
 	return string(b)
 }
+
+// GetUserURLs — returns paginated URLs for a user
+func (s *URLService) GetUserURLs(ctx context.Context, userID string, page, limit int64) ([]model.URL, int64, error) {
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.urlRepo.FindByUserID(ctx, objID, page, limit)
+}

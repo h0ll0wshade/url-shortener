@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"time"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -119,4 +120,52 @@ func (h *URLHandler) Redirect(c *gin.Context) {
 
 	// perform the redirect
 	c.Redirect(http.StatusMovedPermanently, url.OriginalURL)
+}
+
+// GET /users/:userId/urls
+func (h *URLHandler) GetUserURLs(c *gin.Context) {
+	// userID from the JWT (set by RequireAuth middleware)
+	tokenUserID := c.GetString("user_id")
+	pathUserID := c.Param("userId")
+
+	// users can only see their own URLs
+	if tokenUserID != pathUserID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "you can only see your own urls"})
+		return
+	}
+
+	// parse query params with defaults
+	page, _ := strconv.ParseInt(c.DefaultQuery("page", "1"), 10, 64)
+	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "20"), 10, 64)
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	urls, total, err := h.urlService.GetUserURLs(c.Request.Context(), tokenUserID, page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "something went wrong"})
+		return
+	}
+
+	// build response — add short_url to each url
+	urlList := make([]gin.H, 0, len(urls))
+	for _, url := range urls {
+		urlList = append(urlList, gin.H{
+			"alias":        url.Alias,
+			"original_url": url.OriginalURL,
+			"short_url":    h.baseURL + "/r/" + url.Alias,
+			"created_at":   url.CreatedAt,
+			"expires_at":   url.ExpiresAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total": total,
+		"page":  page,
+		"urls":  urlList,
+	})
 }

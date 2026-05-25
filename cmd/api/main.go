@@ -71,6 +71,12 @@ func main() {
     // redirect route (no auth needed, never)
     r.GET("/r/:alias", urlHandler.Redirect)
 
+    // protected routes — JWT required
+    protected := r.Group("/")
+    protected.Use(middleware.RequireAuth(cfg.JWTSecret))
+    {
+        protected.GET("/users/:userId/urls", urlHandler.GetUserURLs)
+    }
     
     log.Println("🚀 Server running on port", cfg.Port)
     r.Run(":" + cfg.Port)
