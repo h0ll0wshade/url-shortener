@@ -15,6 +15,8 @@ import (
 	"github.com/h0ll0wshade/url-shortener/internal/service"
 
     "github.com/h0ll0wshade/url-shortener/internal/middleware"
+
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -60,6 +62,8 @@ func main() {
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 	}
+    // prometheus metrics endpoint
+    r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
     // anonymous url routes
 	urls := r.Group("/urls")

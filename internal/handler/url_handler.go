@@ -6,7 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/h0ll0wshade/url-shortener/internal/metrics"
 	"github.com/h0ll0wshade/url-shortener/internal/model"
 	"github.com/h0ll0wshade/url-shortener/internal/service"
 )
@@ -112,13 +114,40 @@ func (h *URLHandler) Redirect(c *gin.Context) {
 		return
 	}
 
-	// check if link has expired
 	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
 		c.JSON(http.StatusGone, gin.H{"error": "this link has expired"})
 		return
 	}
 
-	// perform the redirect
+	// ── record metrics ──
+	// ownerID := ""
+	// if !url.UserID.IsZero() {
+	// 	ownerID = url.UserID.Hex()
+	// }
+
+	referrer := metrics.NormalizeReferrer(c.Request.Referer())
+	userAgent := metrics.NormalizeUserAgent(c.Request.UserAgent())
+
+	metrics.URLClicksTotal.With(prometheus.Labels{
+		"alias":   alias,
+		// "user_id": ownerID,
+	}).Inc()
+
+	metrics.URLClicksByReferrerTotal.With(prometheus.Labels{
+		"alias":    alias,
+		"referrer": referrer,
+	}).Inc()
+
+	metrics.URLClicksByUserAgentTotal.With(prometheus.Labels{
+		"alias":      alias,
+		"user_agent": userAgent,
+	}).Inc()
+
+	metrics.URLLastClickTimestampSeconds.With(prometheus.Labels{
+		"alias": alias,
+	}).Set(float64(time.Now().Unix()))
+
+	// redirect
 	c.Redirect(http.StatusMovedPermanently, url.OriginalURL)
 }
 
