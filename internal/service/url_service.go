@@ -2,25 +2,34 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math/rand"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/h0ll0wshade/url-shortener/internal/cache"
 	"github.com/h0ll0wshade/url-shortener/internal/model"
+	"github.com/h0ll0wshade/url-shortener/internal/metrics"
 	"github.com/h0ll0wshade/url-shortener/internal/repository"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 const aliasLength = 6
+const cacheTTL = 1 * time.Hour
 
 type URLService struct {
 	urlRepo *repository.URLRepository
+	cache   *cache.Cache
 }
 
-func NewURLService(urlRepo *repository.URLRepository) *URLService {
-	return &URLService{urlRepo: urlRepo}
+func NewURLService(urlRepo *repository.URLRepository, cache *cache.Cache) *URLService {
+	return &URLService{
+		urlRepo: urlRepo,
+		cache:   cache,
+	}
 }
 
 // CreateWithRandomAlias — generates a random alias, retries if taken
@@ -47,7 +56,36 @@ func (s *URLService) CreateWithCustomAlias(ctx context.Context, originalURL, cus
 
 // GetByAlias — fetch URL metadata by alias
 func (s *URLService) GetByAlias(ctx context.Context, alias string) (*model.URL, error) {
-	return s.urlRepo.FindByAlias(ctx, alias)
+	cacheKey := "alias:" + alias
+
+	// 1. try cache first
+	cached, err := s.cache.Get(ctx, cacheKey)
+	if err == nil {
+		var url model.URL
+		if jsonErr := json.Unmarshal([]byte(cached), &url); jsonErr == nil {
+			metrics.CacheHitsTotal.With(prometheus.Labels{"cache": "alias"}).Inc()
+			return &url, nil
+		}
+		// JSON decode failed — treat as cache miss, refetch from DB
+	}
+
+	metrics.CacheMissesTotal.With(prometheus.Labels{"cache": "alias"}).Inc()
+
+	// 2. cache miss — query MongoDB
+	url, err := s.urlRepo.FindByAlias(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	if url == nil {
+		return nil, nil
+	}
+
+	// 3. populate cache for next time
+	if data, jsonErr := json.Marshal(url); jsonErr == nil {
+		_ = s.cache.Set(ctx, cacheKey, string(data), cacheTTL)
+	}
+
+	return url, nil
 }
 
 // save — internal helper, builds the URL and inserts it

@@ -41,4 +41,22 @@ var (
 		},
 		[]string{"alias"},
 	)
+
+	// cache hit counter
+	CacheHitsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cache_hits_total",
+			Help: "Number of cache hits",
+		},
+		[]string{"cache"},
+	)
+
+	// cache miss counter
+	CacheMissesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cache_misses_total",
+			Help: "Number of cache misses",
+		},
+		[]string{"cache"},
+	)
 )

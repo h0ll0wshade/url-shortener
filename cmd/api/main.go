@@ -13,6 +13,7 @@ import (
 	"github.com/h0ll0wshade/url-shortener/internal/handler"
 	"github.com/h0ll0wshade/url-shortener/internal/repository"
 	"github.com/h0ll0wshade/url-shortener/internal/service"
+    "github.com/h0ll0wshade/url-shortener/internal/cache"
 
     "github.com/h0ll0wshade/url-shortener/internal/middleware"
 
@@ -39,6 +40,14 @@ func main() {
     log.Println("✅ Connected to MongoDB")
 
     db := client.Database(cfg.MongoDB)
+
+    // ── cache ──
+	cache, err := cache.NewCache(cfg.RedisAddr)
+	if err != nil {
+		log.Fatal("Redis connection failed:", err)
+	}
+	log.Println("✅ Connected to Redis")
+
     // ── users ──
 	userRepo := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -46,7 +55,7 @@ func main() {
     
     // ── urls ──
 	urlRepo     := repository.NewURLRepository(db)
-	urlService  := service.NewURLService(urlRepo)
+	urlService  := service.NewURLService(urlRepo, cache)
     urlHandler := handler.NewURLHandler(urlService, cfg.BaseURL)
 
 	// set up router
